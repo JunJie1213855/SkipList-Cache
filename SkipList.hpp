@@ -9,8 +9,8 @@
 
 #define STORE_FILE "dumpFile"
 
-std::mutex mtx;              // mutex for critical section
-std::string delimiter = ":"; // 分割符
+// std::mutex mtx;              // mutex for critical section
+// std::string delimiter = ":"; // 分割符
 
 /**
  * @brief Class template to implement node
@@ -71,16 +71,21 @@ void Node<K, V>::set_value(V value)
 {
     this->value = value;
 };
-
+// int random_level()
+// {
+//     int lv = 0;
+//     while (dist_(rng_) < p_ && lv < MaxLevel)
+//         ++lv;
+//     return lv;
+// }
 /**
  * @brief Class template for Skip list
  */
-template <typename K, typename V>
+template <typename K, typename V, typename Compare = std::less<K>>
 class SkipList
 {
-
 public:
-    SkipList(int max_level);
+    SkipList(int max_level, Compare comp = Compare());
     ~SkipList();
 
     // 获取跳表的随机
@@ -96,22 +101,22 @@ public:
      * @return true 不存在键，插入成功
      * @return false 存在相同的键，更新
      */
-    bool insert_element(K key, V value);
+    bool insert(K key, V value);
 
     // 显示列表
-    void display_list();
+    void display();
 
     // 查询键
     std::optional<V> search_element(K key);
 
     // 删除键
-    void delete_element(K key);
+    void erase(K key);
 
     // 落盘
-    void dump_file();
+    void dump();
 
     // 安装
-    void load_file();
+    void load();
 
     // 递归删除节点
     void clear(Node<K, V> *node);
@@ -123,27 +128,38 @@ private:
     void get_key_value_from_string(const std::string &str, std::string *key, std::string *value);
     bool is_valid_string(const std::string &str);
 
+    bool key_less(const K &a, const K &b) const { return _comp(a, b); }
+    bool key_equal(const K &a, const K &b) const { return !_comp(a, b) && !_comp(b, a); }
+
 private:
-    // Maximum level of the skip list
+    // 多线程并行
+    std::mutex mtx;
+    // 静态分隔符
+    static constexpr std::string_view delimiter = ":";
+
+    // 最大层级
     int _max_level;
 
-    // current level of skip list
+    // 当前跳表的层级
     int _skip_list_level;
 
-    // pointer to header node
+    // 头节点指针
     Node<K, V> *_header;
 
-    // file operator
+    // 磁盘读取写入器
     std::ofstream _file_writer;
     std::ifstream _file_reader;
 
-    // skiplist current element count
+    // 跳表元素梳理
     int _element_count;
+
+    // 比较器
+    Compare _comp;
 };
 
 // create new node
-template <typename K, typename V>
-Node<K, V> *SkipList<K, V>::create_node(const K k, const V v, int level)
+template <typename K, typename V, typename Compare>
+Node<K, V> *SkipList<K, V, Compare>::create_node(const K k, const V v, int level)
 {
     Node<K, V> *n = new Node<K, V>(k, v, level);
     return n;
@@ -172,8 +188,8 @@ level 0         1    4   9 10         30   40  | 50 |  60      70       100
                                                +----+
 
 */
-template <typename K, typename V>
-bool SkipList<K, V>::insert_element(const K key, const V value)
+template <typename K, typename V, typename Compare>
+bool SkipList<K, V, Compare>::insert(const K key, const V value)
 {
     // 多线程加锁
     std::lock_guard<std::mutex> lock(mtx);
@@ -187,7 +203,7 @@ bool SkipList<K, V>::insert_element(const K key, const V value)
     // 从上往下遍历层级
     for (int i = _skip_list_level; i >= 0; i--)
     {
-        while (current->forward[i] != NULL && current->forward[i]->get_key() < key) // 如果当前层级的节点值小于插入的key值，说明要插入到后面
+        while (current->forward[i] != NULL && key_less(current->forward[i]->get_key(), key)) // 如果当前层级的节点值小于插入的key值，说明要插入到后面
         {
             current = current->forward[i]; // 下一个节点
         }
@@ -198,7 +214,7 @@ bool SkipList<K, V>::insert_element(const K key, const V value)
     current = current->forward[0];
 
     // 如果 key 存在， 更新就可以了
-    if (current != NULL && current->get_key() == key)
+    if (current != NULL && key_equal(current->get_key(), key))
     {
         current->set_value(value);
         std::cout << "key: " << key << " exists" << ", the value update : " << value << std::endl;
@@ -207,7 +223,7 @@ bool SkipList<K, V>::insert_element(const K key, const V value)
 
     // current 为空，说明我们已经到达这层的尾部
     // current 的 key 和 插入的 key 不一致，说明我们可以在后面插入
-    if (current == NULL || current->get_key() != key)
+    if (current == NULL || !key_equal(current->get_key(), key))
     {
 
         // 生成随机的层级 ！
@@ -240,8 +256,8 @@ bool SkipList<K, V>::insert_element(const K key, const V value)
 }
 
 // Display skip list
-template <typename K, typename V>
-void SkipList<K, V>::display_list()
+template <typename K, typename V, typename Compare>
+void SkipList<K, V, Compare>::display()
 {
 
     std::cout << "\n*****Skip List*****" << "\n";
@@ -261,11 +277,11 @@ void SkipList<K, V>::display_list()
 }
 
 // Dump data in memory to file
-template <typename K, typename V>
-void SkipList<K, V>::dump_file()
+template <typename K, typename V, typename Compare>
+void SkipList<K, V, Compare>::dump()
 {
 
-    std::cout << "dump_file-----------------" << std::endl;
+    std::cout << "dump-----------------" << std::endl;
     _file_writer.open(STORE_FILE);
     Node<K, V> *node = this->_header->forward[0];
 
@@ -282,12 +298,12 @@ void SkipList<K, V>::dump_file()
 }
 
 // Load data from disk
-template <typename K, typename V>
-void SkipList<K, V>::load_file()
+template <typename K, typename V, typename Compare>
+void SkipList<K, V, Compare>::load()
 {
 
     _file_reader.open(STORE_FILE);
-    std::cout << "load_file-----------------" << std::endl;
+    std::cout << "load-----------------" << std::endl;
     std::string line;
     std::string *key = new std::string();
     std::string *value = new std::string();
@@ -299,7 +315,7 @@ void SkipList<K, V>::load_file()
             continue;
         }
         // Define key as int type
-        insert_element(stoi(*key), *value);
+        insert(stoi(*key), *value);
         std::cout << "key:" << *key << "value:" << *value << std::endl;
     }
     delete key;
@@ -308,14 +324,14 @@ void SkipList<K, V>::load_file()
 }
 
 // Get current SkipList size
-template <typename K, typename V>
-int SkipList<K, V>::size()
+template <typename K, typename V, typename Compare>
+int SkipList<K, V, Compare>::size()
 {
     return _element_count;
 }
 
-template <typename K, typename V>
-void SkipList<K, V>::get_key_value_from_string(const std::string &str, std::string *key, std::string *value)
+template <typename K, typename V, typename Compare>
+void SkipList<K, V, Compare>::get_key_value_from_string(const std::string &str, std::string *key, std::string *value)
 {
 
     if (!is_valid_string(str))
@@ -326,8 +342,8 @@ void SkipList<K, V>::get_key_value_from_string(const std::string &str, std::stri
     *value = str.substr(str.find(delimiter) + 1, str.length());
 }
 
-template <typename K, typename V>
-bool SkipList<K, V>::is_valid_string(const std::string &str)
+template <typename K, typename V, typename Compare>
+bool SkipList<K, V, Compare>::is_valid_string(const std::string &str)
 {
 
     if (str.empty())
@@ -342,8 +358,8 @@ bool SkipList<K, V>::is_valid_string(const std::string &str)
 }
 
 // Delete element from skip list
-template <typename K, typename V>
-void SkipList<K, V>::delete_element(K key)
+template <typename K, typename V, typename Compare>
+void SkipList<K, V, Compare>::erase(K key)
 {
 
     // mtx.lock();
@@ -351,12 +367,12 @@ void SkipList<K, V>::delete_element(K key)
     Node<K, V> *current = this->_header;
     // Node<K, V> *update[_max_level + 1];
     // memset(update, 0, sizeof(Node<K, V> *) * (_max_level + 1));
-    std::vector<Node<K,V> *> update(_max_level + 1, nullptr);
+    std::vector<Node<K, V> *> update(_max_level + 1, nullptr);
 
     // start from highest level of skip list
     for (int i = _skip_list_level; i >= 0; i--)
     {
-        while (current->forward[i] != NULL && current->forward[i]->get_key() < key)
+        while (current->forward[i] != NULL && key_less(current->forward[i]->get_key(), key))
         {
             current = current->forward[i];
         }
@@ -364,7 +380,7 @@ void SkipList<K, V>::delete_element(K key)
     }
 
     current = current->forward[0];
-    if (current != NULL && current->get_key() == key)
+    if (current != NULL && key_equal(current->get_key(), key))
     {
 
         // start for lowest level and delete the current node of each level
@@ -411,8 +427,8 @@ level 1         1    4     10         30         50|           70       100
                                                    |
 level 0         1    4   9 10         30   40    50+-->60      70       100
 */
-template <typename K, typename V>
-std::optional<V> SkipList<K, V>::search_element(K key)
+template <typename K, typename V, typename Compare>
+std::optional<V> SkipList<K, V, Compare>::search_element(K key)
 {
 
     std::cout << "search_element-----------------" << std::endl;
@@ -421,7 +437,7 @@ std::optional<V> SkipList<K, V>::search_element(K key)
     // start from highest level of skip list
     for (int i = _skip_list_level; i >= 0; i--)
     {
-        while (current->forward[i] && current->forward[i]->get_key() < key)
+        while (current->forward[i] && key_less(current->forward[i]->get_key(), key))
         {
             current = current->forward[i];
         }
@@ -431,7 +447,7 @@ std::optional<V> SkipList<K, V>::search_element(K key)
     current = current->forward[0];
 
     // if current node have key equal to searched key, we get it
-    if (current && current->get_key() == key)
+    if (current && key_equal(current->get_key(), key))
     {
         std::cout << "Found key: " << key << ", value: " << current->get_value() << std::endl;
         return current->get_value();
@@ -442,22 +458,18 @@ std::optional<V> SkipList<K, V>::search_element(K key)
 }
 
 // construct skip list
-template <typename K, typename V>
-SkipList<K, V>::SkipList(int max_level)
+template <typename K, typename V, typename Compare>
+SkipList<K, V, Compare>::SkipList(int max_level, Compare comp)
+    : _max_level(max_level), _skip_list_level(0), _element_count(0), _comp(comp)
 {
-
-    this->_max_level = max_level;
-    this->_skip_list_level = 0;
-    this->_element_count = 0;
-
     // create header node and initialize key and value to null
     K k;
     V v;
     this->_header = new Node<K, V>(k, v, _max_level);
 };
 
-template <typename K, typename V>
-SkipList<K, V>::~SkipList()
+template <typename K, typename V, typename Compare>
+SkipList<K, V, Compare>::~SkipList()
 {
 
     if (_file_writer.is_open())
@@ -477,8 +489,8 @@ SkipList<K, V>::~SkipList()
     delete (_header);
     _header = nullptr;
 }
-template <typename K, typename V>
-void SkipList<K, V>::clear(Node<K, V> *cur)
+template <typename K, typename V, typename Compare>
+void SkipList<K, V, Compare>::clear(Node<K, V> *cur)
 {
     if (cur->forward[0] != nullptr)
     {
@@ -488,8 +500,8 @@ void SkipList<K, V>::clear(Node<K, V> *cur)
     cur = nullptr;
 }
 
-template <typename K, typename V>
-int SkipList<K, V>::get_random_level()
+template <typename K, typename V, typename Compare>
+int SkipList<K, V, Compare>::get_random_level()
 {
 
     int k = 1;
