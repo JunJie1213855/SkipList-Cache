@@ -535,13 +535,10 @@ void SkipList<K, V, Compare>::clear(Node<K, V> *cur)
 template <typename K, typename V, typename Compare>
 int SkipList<K, V, Compare>::get_random_level()
 {
-
-    int k = 1;
-    while (rand() % 2)
-    {
-        k++;
+    int level = 0;
+    while (level < _max_level && ((double)rand() / RAND_MAX) < _prob) {
+        level++;
     }
-    k = (k < _max_level) ? k : _max_level;
-    return k;
+    return level;
 };
 // vim: et tw=100 ts=4 sw=4 cc=120
