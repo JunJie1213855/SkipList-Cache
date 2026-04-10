@@ -8,10 +8,6 @@
 #include <optional>
 
 #define STORE_FILE "dumpFile"
-
-// std::mutex mtx;              // mutex for critical section
-// std::string delimiter = ":"; // 分割符
-
 /**
  * @brief Class template to implement node
  */
@@ -71,13 +67,7 @@ void Node<K, V>::set_value(V value)
 {
     this->value = value;
 };
-// int random_level()
-// {
-//     int lv = 0;
-//     while (dist_(rng_) < p_ && lv < MaxLevel)
-//         ++lv;
-//     return lv;
-// }
+
 /**
  * @brief Class template for Skip list
  */
@@ -85,7 +75,7 @@ template <typename K, typename V, typename Compare = std::less<K>>
 class SkipList
 {
 public:
-    SkipList(int max_level, Compare comp = Compare());
+    SkipList(int max_level, double prob = 0.5, Compare comp = Compare());
     ~SkipList();
 
     // 获取跳表的随机
@@ -103,14 +93,23 @@ public:
      */
     bool insert(K key, V value);
 
+    // 删除键
+    void erase(K key);
+
     // 显示列表
     void display();
 
     // 查询键
-    std::optional<V> search_element(K key);
+    std::optional<V> search(K key);
 
-    // 删除键
-    void erase(K key);
+    // 是否包含键
+    bool contain(K key)
+    {
+        return search(key).has_value();
+    }
+
+    // 范围查找
+    std::vector<std::pair<K, V>> range_query(const K &start_key, const K &end_key) const;
 
     // 落盘
     void dump();
@@ -132,8 +131,12 @@ private:
     bool key_equal(const K &a, const K &b) const { return !_comp(a, b) && !_comp(b, a); }
 
 private:
+    // 层级概率
+    double _prob;
+
     // 多线程并行
     std::mutex mtx;
+
     // 静态分隔符
     static constexpr std::string_view delimiter = ":";
 
@@ -428,10 +431,10 @@ level 1         1    4     10         30         50|           70       100
 level 0         1    4   9 10         30   40    50+-->60      70       100
 */
 template <typename K, typename V, typename Compare>
-std::optional<V> SkipList<K, V, Compare>::search_element(K key)
+std::optional<V> SkipList<K, V, Compare>::search(K key)
 {
 
-    std::cout << "search_element-----------------" << std::endl;
+    std::cout << "search-----------------" << std::endl;
     Node<K, V> *current = _header;
 
     // start from highest level of skip list
@@ -457,10 +460,38 @@ std::optional<V> SkipList<K, V, Compare>::search_element(K key)
     return std::nullopt;
 }
 
+template <typename K, typename V, typename Compare>
+std::vector<std::pair<K, V>> SkipList<K, V, Compare>::range_query(const K &start_key, const K &end_key) const
+{
+    if (!key_less(start_key, end_key))
+    {
+        return {{}};
+    }
+
+    std::vector<std::pair<K, V>> result;
+    Node<K, V> *cur = _header;
+    // 查找到开始节点 start_key
+    for (int i = _skip_list_level; i >= 0; --i)
+    {
+        while (cur->forward[i] && key_less(cur->forward[i]->get_key(), start_key))
+        {
+            cur = cur->forward[i];
+        }
+    }
+    // 从最下面开始
+    cur = cur->forward[0];
+    while (cur && key_less(cur->get_key(), end_key))
+    {
+        result.emplace_back(cur->get_key(), cur->get_value());
+        cur = cur->forward[0];
+    }
+    return result;
+}
+
 // construct skip list
 template <typename K, typename V, typename Compare>
-SkipList<K, V, Compare>::SkipList(int max_level, Compare comp)
-    : _max_level(max_level), _skip_list_level(0), _element_count(0), _comp(comp)
+SkipList<K, V, Compare>::SkipList(int max_level, double prob, Compare comp)
+    : _max_level(max_level), _prob(prob), _skip_list_level(0), _element_count(0), _comp(comp)
 {
     // create header node and initialize key and value to null
     K k;
@@ -486,6 +517,7 @@ SkipList<K, V, Compare>::~SkipList()
     {
         clear(_header->forward[0]);
     }
+    // 删除置空
     delete (_header);
     _header = nullptr;
 }
