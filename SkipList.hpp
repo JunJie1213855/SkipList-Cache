@@ -15,6 +15,8 @@
 #include <fstream>
 #include <vector>
 #include <optional>
+#include <shared_mutex>
+
 
 /**
  * @brief 跳表节点类
@@ -256,7 +258,7 @@ public:
     void dump(std::string_view dump_path);
 
     /**
-     * @brief 从磁盘加载数据到跳表
+     * @brief 从磁盘加载数据到跳表, 仅仅支持 int 类型的 key, 其他的格式todo
      * @param dump_path 文件路径
      * @note 加载时会调用 insert 逐个插入
      */
@@ -315,7 +317,7 @@ private:
     /**
      * @brief 线程安全互斥锁
      */
-    std::mutex mtx;
+    mutable std::shared_mutex mtx;
 
     /**
      * @brief 持久化时的分隔符
@@ -367,7 +369,7 @@ template <typename K, typename V, typename Compare>
 bool SkipList<K, V, Compare>::insert(const K key, const V value)
 {
     // 多线程加锁
-    std::lock_guard<std::mutex> lock(mtx);
+    std::unique_lock<std::shared_mutex> lock(mtx);
 
     // 头节点获取
     Node<K, V> *current = this->_header;
@@ -459,6 +461,7 @@ void SkipList<K, V, Compare>::display()
 template <typename K, typename V, typename Compare>
 void SkipList<K, V, Compare>::dump(std::string_view dump_path)
 {
+    std::unique_lock<std::shared_mutex> lock(mtx);
 
     std::cout << "================== dump ==================" << std::endl;
     _file_writer.open(dump_path.cbegin());
@@ -480,6 +483,7 @@ void SkipList<K, V, Compare>::dump(std::string_view dump_path)
 template <typename K, typename V, typename Compare>
 void SkipList<K, V, Compare>::load(std::string_view dump_path)
 {
+    std::unique_lock<std::shared_mutex> lock(mtx);
 
     _file_reader.open(dump_path.cbegin());
     std::cout << "================== load ==================" << std::endl;
@@ -506,6 +510,7 @@ void SkipList<K, V, Compare>::load(std::string_view dump_path)
 template <typename K, typename V, typename Compare>
 int SkipList<K, V, Compare>::size()
 {
+    std::shared_lock<std::shared_mutex> lock(mtx);
     return _element_count;
 }
 
@@ -541,7 +546,7 @@ template <typename K, typename V, typename Compare>
 void SkipList<K, V, Compare>::erase(K key)
 {
     // 多线程安全
-    std::lock_guard<std::mutex> lock(mtx);
+    std::unique_lock<std::shared_mutex> lock(mtx);
 
     // 头节点
     Node<K, V> *current = this->_header;
@@ -597,6 +602,7 @@ std::optional<V> SkipList<K, V, Compare>::search(K key)
 #ifdef SKIP_DEBUG_OUTSTREAM
     std::cout << "================== search ==================" << std::endl;
 #endif
+    std::shared_lock<std::shared_mutex> lock(mtx);
     Node<K, V> *current = _header;
 
     // 自顶向下
@@ -629,11 +635,13 @@ std::optional<V> SkipList<K, V, Compare>::search(K key)
 template <typename K, typename V, typename Compare>
 std::vector<std::pair<K, V>> SkipList<K, V, Compare>::range_query(const K &start_key, const K &end_key) const
 {
+    
     if (!key_less(start_key, end_key))
     {
         return {{}};
     }
-
+    
+    std::shared_lock<std::shared_mutex> lock(mtx);
     std::vector<std::pair<K, V>> result;
     Node<K, V> *cur = _header;
     // 查找到开始节点 start_key

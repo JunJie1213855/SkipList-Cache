@@ -6,9 +6,12 @@
 
 - **Header-only**: 仅需包含 `SkipList.hpp` 即可使用
 - **C++17**: 模板化设计，支持自定义键类型和比较器
-- **线程安全**: 写操作使用互斥锁保护
+- **线程安全**: 读写锁（shared_mutex）保护并发访问
+  - 写操作（insert/erase/dump/load）使用独占锁
+  - 读操作（search/range_query/size）使用共享锁
 - **持久化**: 支持数据落盘和加载
 - **范围查询**: 支持 `[start_key, end_key)` 区间查询
+- **自定义比较器**: 支持自定义键类型和排序规则
 
 ## 快速开始
 
@@ -36,7 +39,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
 ```cpp
 #include "SkipList.hpp"
 
-// 默认 int/int 键值对
+// 默认 int/int 键值对，使用 std::less<int> 比较
 SkipList<int, std::string> list(16);
 
 // 插入
@@ -44,12 +47,12 @@ list.insert(1, "hello");
 list.insert(2, "world");
 
 // 查询
-auto value = list.search(1);  // 返回 optional
+auto value = list.search(1);  // 返回 std::optional
 
 // 删除
 list.erase(1);
 
-// 范围查询
+// 范围查询 [10, 50)
 auto range = list.range_query(10, 50);
 
 // 持久化
@@ -79,17 +82,17 @@ SkipList(int max_level, double prob = 0.5, Compare comp = Compare());
 
 ## 接口
 
-| 方法 | 说明 |
-|------|------|
-| `insert(key, value)` | 插入/更新键值对 |
-| `erase(key)` | 删除键值对 |
-| `search(key)` | 查找值（返回 optional） |
-| `contain(key)` | 检查键是否存在 |
-| `range_query(start, end)` | 范围查询 |
-| `dump(path)` | 持久化到文件 |
-| `load(path)` | 从文件加载 |
-| `display()` | 打印跳表结构（调试） |
-| `size()` | 返回元素数量 |
+| 方法 | 说明 | 线程安全 |
+|------|------|----------|
+| `insert(key, value)` | 插入/更新键值对 | 独占锁 |
+| `erase(key)` | 删除键值对 | 独占锁 |
+| `search(key)` | 查找值（返回 optional） | 共享锁 |
+| `contain(key)` | 检查键是否存在 | 共享锁 |
+| `range_query(start, end)` | 范围查询 | 共享锁 |
+| `dump(path)` | 持久化到文件 | 独占锁 |
+| `load(path)` | 从文件加载 | 独占锁 |
+| `display()` | 打印跳表结构（调试） | 无锁 |
+| `size()` | 返回元素数量 | 共享锁 |
 
 ## 编译宏
 
@@ -112,7 +115,8 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 ├── SkipList.hpp    # 跳表实现（header-only）
 ├── main.cc         # 示例程序
 ├── benchmark.cc    # QPS 基准测试
-└── CMakeLists.txt  # 构建配置
+├── CMakeLists.txt  # 构建配置
+└── README.md       # 项目文档
 ```
 
 ## 性能
@@ -121,6 +125,6 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 
 | 操作 | QPS |
 |------|-----|
-| Insert | 6896316 |
-| Erase | 17834849 |
-| Mixed | 5011024 |
+| Insert | 6007810 |
+| Erase | 14872100 |
+| Mixed | 3667571 |
