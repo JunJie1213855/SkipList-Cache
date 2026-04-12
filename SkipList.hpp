@@ -497,8 +497,12 @@ void SkipList<K, V, Compare>::load(std::string_view dump_path)
         {
             continue;
         }
-        // 默认 key 为 int 类型，这里要重新定义一下
-        insert(stoi(*key), *value);
+        // 根据 K 类型解析 key - 使用 SFINAE/if constexpr 支持不同类型
+        if constexpr (std::is_same_v<K, int>) {
+            insert(std::stoi(*key), *value);
+        } else if constexpr (std::is_same_v<K, std::string>) {
+            insert(*key, *value);
+        }
         std::cout << "key:" << *key << "value:" << *value << std::endl;
     }
     delete key;

@@ -21,6 +21,12 @@ add_executable(main
 )
 
 # benchmark
-add_executable(benchmark 
+add_executable(benchmark
     benchmark.cc SkipList.hpp
 )
+
+# cli
+add_executable(cli
+    cli.cc SkipList.hpp
+)
+target_link_libraries(cli readline)
