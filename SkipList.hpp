@@ -483,7 +483,7 @@ void SkipList<K, V, Compare>::dump(std::string_view dump_path)
 template <typename K, typename V, typename Compare>
 void SkipList<K, V, Compare>::load(std::string_view dump_path)
 {
-    std::unique_lock<std::shared_mutex> lock(mtx);
+    // std::unique_lock<std::shared_mutex> lock(mtx);
 
     _file_reader.open(dump_path.cbegin());
     std::cout << "================== load ==================" << std::endl;

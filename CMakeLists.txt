@@ -5,6 +5,9 @@ project(skiplist)
 # support for optional
 set(CMAKE_CXX_STANDARD 17)
 
+# Enable testing
+enable_testing()
+
 # debug type
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     message("BUILD WITH DEBUG")
@@ -16,7 +19,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 # for test
-add_executable(main 
+add_executable(main
     main.cc SkipList.hpp
 )
 
@@ -30,3 +33,6 @@ add_executable(cli
     cli.cc SkipList.hpp
 )
 target_link_libraries(cli readline)
+
+# Unit tests
+add_subdirectory(test)
